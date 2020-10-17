@@ -5,60 +5,51 @@
 #
 #   Author: Daniel Lundin <dln(at)eintr(dot)org>
 #
-from __future__ import print_function
-
+import itertools
+import logging
+import sys
 import zmq
+
+logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
 
 REQUEST_TIMEOUT = 2500
 REQUEST_RETRIES = 3
 SERVER_ENDPOINT = "tcp://localhost:5555"
 
-context = zmq.Context(1)
+context = zmq.Context()
 
-print("I: Connecting to server...")
+logging.info("Connecting to server…")
 client = context.socket(zmq.REQ)
 client.connect(SERVER_ENDPOINT)
 
-poll = zmq.Poller()
-poll.register(client, zmq.POLLIN)
-
-sequence = 0
-retries_left = REQUEST_RETRIES
-while retries_left:
-    sequence += 1
+for sequence in itertools.count():
     request = str(sequence).encode()
-    print("I: Sending (%s)" % request)
+    logging.info("Sending (%s)", request)
     client.send(request)
 
-    expect_reply = True
-    while expect_reply:
-        socks = dict(poll.poll(REQUEST_TIMEOUT))
-        if socks.get(client) == zmq.POLLIN:
+    retries_left = REQUEST_RETRIES
+    while True:
+        if (client.poll(REQUEST_TIMEOUT) & zmq.POLLIN) != 0:
             reply = client.recv()
-            if not reply:
-                break
             if int(reply) == sequence:
-                print("I: Server replied OK (%s)" % reply)
-                retries_left = REQUEST_RETRIES
-                expect_reply = False
-            else:
-                print("E: Malformed reply from server: %s" % reply)
-
-        else:
-            print("W: No response from server, retrying...")
-            # Socket is confused. Close and remove it.
-            client.setsockopt(zmq.LINGER, 0)
-            client.close()
-            poll.unregister(client)
-            retries_left -= 1
-            if retries_left == 0:
-                print("E: Server seems to be offline, abandoning")
+                logging.info("Server replied OK (%s)", reply)
                 break
-            print("I: Reconnecting and resending (%s)" % request)
-            # Create new connection
-            client = context.socket(zmq.REQ)
-            client.connect(SERVER_ENDPOINT)
-            poll.register(client, zmq.POLLIN)
-            client.send(request)
+            else:
+                logging.error("Malformed reply from server: %s", reply)
+                continue
 
-context.term()
+        retries_left -= 1
+        logging.warning("No response from server")
+        # Socket is confused. Close and remove it.
+        client.setsockopt(zmq.LINGER, 0)
+        client.close()
+        if retries_left == 0:
+            logging.error("Server seems to be offline, abandoning")
+            sys.exit()
+
+        logging.info("Reconnecting to server…")
+        # Create new connection
+        client = context.socket(zmq.REQ)
+        client.connect(SERVER_ENDPOINT)
+        logging.info("Resending (%s)", request)
+        client.send(request)

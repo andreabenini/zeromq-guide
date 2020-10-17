@@ -7,32 +7,29 @@
 #
 #   Author: Daniel Lundin <dln(at)eintr(dot)org>
 #
-from __future__ import print_function
-
 from random import randint
+import itertools
+import logging
 import time
 import zmq
 
-context = zmq.Context(1)
+logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
+
+context = zmq.Context()
 server = context.socket(zmq.REP)
 server.bind("tcp://*:5555")
 
-cycles = 0
-while True:
+for cycles in itertools.count():
     request = server.recv()
-    cycles += 1
 
     # Simulate various problems, after a few cycles
     if cycles > 3 and randint(0, 3) == 0:
-        print("I: Simulating a crash")
+        logging.info("Simulating a crash")
         break
     elif cycles > 3 and randint(0, 3) == 0:
-        print("I: Simulating CPU overload")
+        logging.info("Simulating CPU overload")
         time.sleep(2)
 
-    print("I: Normal request (%s)" % request)
-    time.sleep(1) # Do some heavy work
+    logging.info("Normal request (%s)", request)
+    time.sleep(1)  # Do some heavy work
     server.send(request)
-
-server.close()
-context.term()
