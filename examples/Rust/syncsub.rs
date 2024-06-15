@@ -1,5 +1,3 @@
-extern crate zmq;
-
 use std::thread;
 use std::time::Duration;
 
@@ -16,7 +14,7 @@ fn main() {
     let sync_client = context.socket(zmq::REQ).unwrap();
     sync_client.connect("tcp://localhost:5561").unwrap();
 
-    assert!(sync_client.send_str("", 0).is_ok());
+    assert!(sync_client.send("", 0).is_ok());
 
     // wait for synchronization reply
     let _ = sync_client.recv_string(0).unwrap().unwrap();
@@ -33,5 +31,4 @@ fn main() {
         }
     }
     println!("Received {} updates", n);
-
 }

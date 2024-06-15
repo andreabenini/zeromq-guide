@@ -50,7 +50,11 @@
   extension: rkt
 - name: Ruby
   extension: rb
+- name: Rust
+  extension: rs
 - name: Scala
   extension: scala
 - name: Tcl
   extension: tcl
+- name: OCaml
+  extension: ml

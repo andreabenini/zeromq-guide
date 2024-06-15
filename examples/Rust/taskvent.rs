@@ -1,11 +1,6 @@
-#![crate_name = "taskvent"]
-
-extern crate rand;
-extern crate zmq;
-
 use rand::Rng;
-use std::{thread, time};
 use std::io::{self, BufRead};
+use std::{thread, time};
 
 fn main() {
     let context = zmq::Context::new();
@@ -20,16 +15,16 @@ fn main() {
     stdin.lock().lines().next();
     println!("Sending tasks to workers...");
 
-    sink.send_str("0", 0).unwrap();
+    sink.send("0", 0).unwrap();
 
-    let mut rng = rand::weak_rng();
+    let mut rng = rand::thread_rng();
 
     let mut total_msec = 0;
     for _ in 0..100 {
-        let workload = rng.gen_range(1, 101);
+        let workload = rng.gen_range(1..101);
         total_msec += workload;
         let string = format!("{}", workload);
-        sender.send_str(&string, 0).unwrap();
+        sender.send(&string, 0).unwrap();
     }
     println!("Total expected cost: {} msec", total_msec);
     thread::sleep(time::Duration::from_secs(1));

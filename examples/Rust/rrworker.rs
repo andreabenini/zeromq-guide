@@ -1,7 +1,3 @@
-#![crate_name = "rrworker"]
-
-extern crate zmq;
-
 use std::{thread, time};
 
 fn main() {
@@ -16,6 +12,6 @@ fn main() {
 
         thread::sleep(time::Duration::from_secs(1));
 
-        responder.send_str(&"World", 0).unwrap();
+        responder.send("World", 0).unwrap();
     }
 }

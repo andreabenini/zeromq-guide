@@ -1,7 +1,3 @@
-#![crate_name = "taskwork"]
-
-extern crate zmq;
-
 use std::io::{self, Write};
 use std::{thread, time};
 
@@ -22,6 +18,6 @@ fn main() {
         println!("{}.", string);
         let _ = io::stdout().flush();
         thread::sleep(time::Duration::from_millis(atoi(&string) as u64));
-        sender.send_str(&"", 0).unwrap();
+        sender.send("", 0).unwrap();
     }
 }

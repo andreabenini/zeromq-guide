@@ -97,7 +97,8 @@ inline static std::string
 s_recv (zmq::socket_t & socket, int flags = 0) {
 
     zmq::message_t message;
-    socket.recv(&message, flags);
+    auto recv_flags = (flags ==0)? zmq::recv_flags::none: zmq::recv_flags::dontwait;
+    (void)socket.recv(message, recv_flags);
 
     return std::string(static_cast<char*>(message.data()), message.size());
 }
@@ -105,13 +106,16 @@ s_recv (zmq::socket_t & socket, int flags = 0) {
 inline static bool s_recv(zmq::socket_t & socket, std::string & ostring, int flags = 0)
 {
 	zmq::message_t message;
-	bool rc = socket.recv(&message, flags);
+    	auto recv_flags = (flags ==0)? zmq::recv_flags::none: zmq::recv_flags::dontwait;
+	auto rc = socket.recv(message, recv_flags);
+
 
 	if (rc) {
 		ostring = std::string(static_cast<char*>(message.data()), message.size());
+        return true;
 	}
 	
-	return (rc);
+	return false;
 }
 
 //  Convert C string to 0MQ string and send to socket
@@ -134,7 +138,7 @@ s_send (zmq::socket_t & socket, const std::string & string, int flags = 0) {
     zmq::message_t message(string.size());
     memcpy (message.data(), string.data(), string.size());
 
-    bool rc = socket.send (message, flags);
+    bool rc = socket.send (message, static_cast<zmq::send_flags>(flags)).has_value();
     return (rc);
 }
 
@@ -159,8 +163,29 @@ s_sendmore (zmq::socket_t & socket, const std::string & string) {
     zmq::message_t message(string.size());
     memcpy (message.data(), string.data(), string.size());
 
-    bool rc = socket.send (message, ZMQ_SNDMORE);
+    bool rc = socket.send (message,   static_cast<zmq::send_flags>(ZMQ_SNDMORE)).has_value();
     return (rc);
+}
+using ustring = std::basic_string<unsigned char>;
+inline static bool s_is_text_data(const ustring &data) {
+  for (int i = 0; i < data.size(); ++i) {
+    if (data[i] < 32 || data[i] > 127)
+      return false;
+  }
+  return true;
+}
+
+template <typename Stream>
+inline static void s_dump_message(Stream &os, const ustring &body) {
+  bool is_text = s_is_text_data(body);
+  os << "[" << std::setfill('0') << std::setw(3) << body.size() << "]";
+  for (size_t char_nbr = 0; char_nbr < body.size(); char_nbr++) {
+    if (is_text)
+      os << (char)body[char_nbr];
+    else
+      os << std::setfill('0') << std::setw(2) << std::hex
+         << (unsigned int)body[char_nbr];
+  }
 }
 
 //  Receives all message parts from socket, prints neatly
@@ -173,29 +198,13 @@ s_dump (zmq::socket_t & socket)
     while (1) {
         //  Process all parts of the message
         zmq::message_t message;
-        socket.recv(&message);
+        (void)socket.recv(message);
 
         //  Dump the message as text or binary
         size_t size = message.size();
-        std::string data(static_cast<char*>(message.data()), size);
+        ustring data(static_cast<unsigned char*>(message.data()), size);
 
-        bool is_text = true;
-
-        size_t char_nbr;
-        unsigned char byte;
-        for (char_nbr = 0; char_nbr < size; char_nbr++) {
-            byte = data [char_nbr];
-            if (byte < 32 || byte > 127)
-                is_text = false;
-        }
-        std::cout << "[" << std::setfill('0') << std::setw(3) << size << "]";
-        for (char_nbr = 0; char_nbr < size; char_nbr++) {
-            if (is_text)
-                std::cout << (char)data [char_nbr];
-            else
-                std::cout << std::setfill('0') << std::setw(2)
-                   << std::hex << (unsigned int) data [char_nbr];
-        }
+        s_dump_message(std::cout, data);
         std::cout << std::endl;
 
         int more = 0;           //  Multipart detection
@@ -219,7 +228,7 @@ s_set_id (zmq::socket_t & socket)
     ss << std::hex << std::uppercase
        << std::setw(4) << std::setfill('0') << within (0x10000) << "-"
        << std::setw(4) << std::setfill('0') << within (0x10000);
-    socket.setsockopt(ZMQ_IDENTITY, ss.str().c_str(), ss.str().length());
+    socket.set(zmq::sockopt::routing_id, ss.str().c_str());
     return ss.str();
 }
 #else
@@ -230,7 +239,7 @@ s_set_id(zmq::socket_t & socket, intptr_t id)
     std::stringstream ss;
     ss << std::hex << std::uppercase
         << std::setw(4) << std::setfill('0') << id;
-    socket.setsockopt(ZMQ_IDENTITY, ss.str().c_str(), ss.str().length());
+    socket.set(zmq::sockopt::routing_id, ss.str().c_str());
     return ss.str();
 }
 #endif
@@ -321,6 +330,9 @@ inline static void s_signal_handler (int signal_value)
 {
     s_interrupted = 1;
 }
+
+
+
 
 inline static void s_catch_signals ()
 {
